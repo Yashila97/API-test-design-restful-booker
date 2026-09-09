@@ -1,0 +1,627 @@
+{
+  "info": {
+    "name": "restful-booker — API test suite",
+    "description": "Manual and semi-automated API test suite for the public restful-booker practice API (https://restful-booker.herokuapp.com). Organised by test type rather than by endpoint, so a run tells you which class of check failed. Written by Naga Yashila Araveti.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "https://restful-booker.herokuapp.com" },
+    { "key": "username", "value": "admin" },
+    { "key": "password", "value": "password123" },
+    { "key": "token", "value": "" },
+    { "key": "bookingId", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "01 — Authentication",
+      "item": [
+        {
+          "name": "TC-AU-001 Valid credentials return a token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('Response contains a token', () => pm.expect(body.token).to.be.a('string').and.not.empty);",
+                  "// Store for the write requests later in the run.",
+                  "if (body.token) { pm.collectionVariables.set('token', body.token); }",
+                  "pm.test('Responds within 3s', () => pm.expect(pm.response.responseTime).to.be.below(3000));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{username}}\",\n  \"password\": \"{{password}}\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/auth", "host": ["{{baseUrl}}"], "path": ["auth"] }
+          }
+        },
+        {
+          "name": "TC-AU-002 Wrong password returns no token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.response.json();",
+                  "// This API answers 200 with a reason rather than 401. Asserting the",
+                  "// ABSENCE of a token is what matters — a client that only checks the",
+                  "// status code would treat this as a successful login.",
+                  "pm.test('No token issued', () => pm.expect(body.token).to.be.undefined);",
+                  "pm.test('A reason is given', () => pm.expect(body.reason).to.be.a('string'));",
+                  "pm.test('OBSERVATION: status is 200, not 401 — recorded as a finding', () => {",
+                  "  pm.expect(pm.response.code).to.eql(200);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"username\": \"admin\",\n  \"password\": \"wrong-password\"\n}" },
+            "url": { "raw": "{{baseUrl}}/auth", "host": ["{{baseUrl}}"], "path": ["auth"] }
+          }
+        },
+        {
+          "name": "TC-AU-003 Empty credentials return no token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.response.json();",
+                  "pm.test('No token issued for empty credentials', () => pm.expect(body.token).to.be.undefined);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"username\": \"\",\n  \"password\": \"\"\n}" },
+            "url": { "raw": "{{baseUrl}}/auth", "host": ["{{baseUrl}}"], "path": ["auth"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "02 — Booking lifecycle",
+      "item": [
+        {
+          "name": "TC-BK-001 Create a booking with valid data",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('A booking id is returned', () => pm.expect(body.bookingid).to.be.a('number').and.above(0));",
+                  "pm.test('Echoed data matches what was sent', () => {",
+                  "  pm.expect(body.booking.firstname).to.eql('Naga');",
+                  "  pm.expect(body.booking.totalprice).to.eql(250);",
+                  "  pm.expect(body.booking.depositpaid).to.eql(true);",
+                  "});",
+                  "if (body.bookingid) { pm.collectionVariables.set('bookingId', body.bookingid); }"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"firstname\": \"Naga\",\n  \"lastname\": \"Araveti\",\n  \"totalprice\": 250,\n  \"depositpaid\": true,\n  \"bookingdates\": {\n    \"checkin\": \"2026-11-01\",\n    \"checkout\": \"2026-11-08\"\n  },\n  \"additionalneeds\": \"Late checkout\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/booking", "host": ["{{baseUrl}}"], "path": ["booking"] }
+          }
+        },
+        {
+          "name": "TC-BK-002 Read the booking back independently",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "// The create response echoing the payload proves nothing about what was",
+                  "// persisted. This is the request that does.",
+                  "pm.test('Persisted data matches what was sent', () => {",
+                  "  pm.expect(body.firstname).to.eql('Naga');",
+                  "  pm.expect(body.totalprice).to.eql(250);",
+                  "  pm.expect(body.bookingdates.checkin).to.eql('2026-11-01');",
+                  "  pm.expect(body.bookingdates.checkout).to.eql('2026-11-08');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/booking/{{bookingId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["booking", "{{bookingId}}"]
+            }
+          }
+        },
+        {
+          "name": "TC-BK-003 Update requires a token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Update without a token is forbidden', () => pm.response.to.have.status(403));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"firstname\": \"Hijacked\",\n  \"lastname\": \"Araveti\",\n  \"totalprice\": 1,\n  \"depositpaid\": false,\n  \"bookingdates\": { \"checkin\": \"2026-11-01\", \"checkout\": \"2026-11-08\" }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/booking/{{bookingId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["booking", "{{bookingId}}"]
+            }
+          }
+        },
+        {
+          "name": "TC-BK-004 Update succeeds with a valid token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('Updated fields are returned', () => {",
+                  "  pm.expect(body.firstname).to.eql('Updated');",
+                  "  pm.expect(body.totalprice).to.eql(400);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Cookie", "value": "token={{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"firstname\": \"Updated\",\n  \"lastname\": \"Araveti\",\n  \"totalprice\": 400,\n  \"depositpaid\": true,\n  \"bookingdates\": { \"checkin\": \"2026-11-01\", \"checkout\": \"2026-11-08\" },\n  \"additionalneeds\": \"Breakfast\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/booking/{{bookingId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["booking", "{{bookingId}}"]
+            }
+          }
+        },
+        {
+          "name": "TC-BK-005 Partial update leaves other fields intact",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('Patched field changed', () => pm.expect(body.firstname).to.eql('Patched'));",
+                  "pm.test('Untouched field preserved', () => pm.expect(body.totalprice).to.eql(400));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Cookie", "value": "token={{token}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"firstname\": \"Patched\"\n}" },
+            "url": {
+              "raw": "{{baseUrl}}/booking/{{bookingId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["booking", "{{bookingId}}"]
+            }
+          }
+        },
+        {
+          "name": "TC-BK-006 Delete the booking",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Delete is accepted', () => pm.expect([200, 201]).to.include(pm.response.code));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Cookie", "value": "token={{token}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/booking/{{bookingId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["booking", "{{bookingId}}"]
+            }
+          }
+        },
+        {
+          "name": "TC-BK-007 Deleted booking is no longer readable",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Deleted record returns 404', () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/booking/{{bookingId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["booking", "{{bookingId}}"]
+            }
+          }
+        },
+        {
+          "name": "TC-BK-008 Deleting twice is not reported as success",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Second delete does not report 200', () => pm.expect(pm.response.code).to.not.eql(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Cookie", "value": "token={{token}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/booking/{{bookingId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["booking", "{{bookingId}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "03 — Boundary and negative",
+      "item": [
+        {
+          "name": "TC-NG-001 Empty payload is rejected",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Empty payload does not create a record', () => pm.expect(pm.response.code).to.not.eql(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{}" },
+            "url": { "raw": "{{baseUrl}}/booking", "host": ["{{baseUrl}}"], "path": ["booking"] }
+          }
+        },
+        {
+          "name": "TC-NG-002 Zero total price is stored exactly",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.response.json();",
+                  "pm.test('Zero is stored as zero, not dropped', () => pm.expect(body.booking.totalprice).to.eql(0));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"firstname\": \"Zero\",\n  \"lastname\": \"Price\",\n  \"totalprice\": 0,\n  \"depositpaid\": false,\n  \"bookingdates\": { \"checkin\": \"2026-11-01\", \"checkout\": \"2026-11-02\" }\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/booking", "host": ["{{baseUrl}}"], "path": ["booking"] }
+          }
+        },
+        {
+          "name": "TC-NG-003 FINDING — negative price is accepted",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.response.json();",
+                  "// Pinning the current behaviour rather than asserting what it should be.",
+                  "// A test that fails because the API is wrong is a defect report that runs",
+                  "// every build and trains the team to ignore red.",
+                  "pm.test('Negative price is stored (documented finding RB-001)', () => {",
+                  "  pm.expect(body.booking.totalprice).to.eql(-100);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"firstname\": \"Negative\",\n  \"lastname\": \"Price\",\n  \"totalprice\": -100,\n  \"depositpaid\": false,\n  \"bookingdates\": { \"checkin\": \"2026-11-01\", \"checkout\": \"2026-11-02\" }\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/booking", "host": ["{{baseUrl}}"], "path": ["booking"] }
+          }
+        },
+        {
+          "name": "TC-NG-004 FINDING — checkout before checkin is accepted",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Inverted date range accepted (documented finding RB-002)', () => {",
+                  "  pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"firstname\": \"Inverted\",\n  \"lastname\": \"Dates\",\n  \"totalprice\": 100,\n  \"depositpaid\": false,\n  \"bookingdates\": { \"checkin\": \"2026-11-08\", \"checkout\": \"2026-11-01\" }\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/booking", "host": ["{{baseUrl}}"], "path": ["booking"] }
+          }
+        },
+        {
+          "name": "TC-NG-005 Unknown id returns 404",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Unknown id returns 404, not an empty object', () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/booking/99999999",
+              "host": ["{{baseUrl}}"],
+              "path": ["booking", "99999999"]
+            }
+          }
+        },
+        {
+          "name": "TC-NG-006 Malformed JSON is rejected cleanly",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Malformed body does not return 200', () => pm.expect(pm.response.code).to.not.eql(200));",
+                  "pm.test('No stack trace leaked in the response', () => {",
+                  "  pm.expect(pm.response.text().toLowerCase()).to.not.include('at java');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{ \"firstname\": \"Broken\", " },
+            "url": { "raw": "{{baseUrl}}/booking", "host": ["{{baseUrl}}"], "path": ["booking"] }
+          }
+        },
+        {
+          "name": "TC-NG-007 Very long field value",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Handled without a server error', () => pm.expect(pm.response.code).to.be.below(500));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"firstname\": \"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\",\n  \"lastname\": \"Long\",\n  \"totalprice\": 100,\n  \"depositpaid\": false,\n  \"bookingdates\": { \"checkin\": \"2026-11-01\", \"checkout\": \"2026-11-02\" }\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/booking", "host": ["{{baseUrl}}"], "path": ["booking"] }
+          }
+        },
+        {
+          "name": "TC-NG-008 Script in a name field is stored as text",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.response.json();",
+                  "pm.test('Stored without executing or corrupting the response', () => {",
+                  "  pm.expect(body.booking.firstname).to.include('script');",
+                  "});",
+                  "pm.test('Content-Type is JSON, not HTML', () => {",
+                  "  pm.expect(pm.response.headers.get('Content-Type')).to.include('json');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"firstname\": \"<script>alert(1)</script>\",\n  \"lastname\": \"Xss\",\n  \"totalprice\": 100,\n  \"depositpaid\": false,\n  \"bookingdates\": { \"checkin\": \"2026-11-01\", \"checkout\": \"2026-11-02\" }\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/booking", "host": ["{{baseUrl}}"], "path": ["booking"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "04 — Listing, filtering and non-functional",
+      "item": [
+        {
+          "name": "TC-LS-001 List all bookings",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Returns an array', () => pm.expect(pm.response.json()).to.be.an('array'));",
+                  "pm.test('Responds within 5s', () => pm.expect(pm.response.responseTime).to.be.below(5000));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/booking", "host": ["{{baseUrl}}"], "path": ["booking"] }
+          }
+        },
+        {
+          "name": "TC-LS-002 Filter by name",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Returns an array', () => pm.expect(pm.response.json()).to.be.an('array'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/booking?firstname=Naga&lastname=Araveti",
+              "host": ["{{baseUrl}}"],
+              "path": ["booking"],
+              "query": [
+                { "key": "firstname", "value": "Naga" },
+                { "key": "lastname", "value": "Araveti" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "TC-LS-003 Filter by date range",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/booking?checkin=2026-01-01&checkout=2026-12-31",
+              "host": ["{{baseUrl}}"],
+              "path": ["booking"],
+              "query": [
+                { "key": "checkin", "value": "2026-01-01" },
+                { "key": "checkout", "value": "2026-12-31" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "TC-NF-001 Health check",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Service is up', () => pm.expect([200, 201]).to.include(pm.response.code));",
+                  "// Run this first in any cycle. A failing suite because the free-tier host",
+                  "// is asleep is not a defect, and knowing that in one request saves an hour.",
+                  "pm.test('Responds within 10s (cold start allowance)', () => {",
+                  "  pm.expect(pm.response.responseTime).to.be.below(10000);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/ping", "host": ["{{baseUrl}}"], "path": ["ping"] }
+          }
+        }
+      ]
+    }
+  ]
+}
